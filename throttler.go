@@ -48,7 +48,19 @@ func newThrottler(cf func() *Bucket) *Throttler {
 			default:
 			}
 			// Clear buckets that are unused more than 4 fill intervals.
-			ret.traverse(4)
+			// Prefetch bucket tags
+			ret.mu.RLock()
+			keys := make([]string, len(ret.buckets))
+			i := 0
+			for k := range ret.buckets {
+				keys[i] = k
+				i++
+			}
+			ret.mu.RUnlock()
+
+			for _, tag := range keys {
+				ret.checkBucket(4, tag)
+			}
 		}
 	}()
 
@@ -67,38 +79,43 @@ func NewThrottlerWithRate(rate float64, capacity int64) *Throttler {
 	return newThrottler(func() *Bucket { return NewBucketWithRate(rate, capacity) })
 }
 
-// traverse scans every bucket in collection and removes unused ones.
+// checkBucket scans bucket from collection and removes it if it's unused.
 // tickThres param regulates how many refillIntervals should pass
 // before unused bucket gets deleted.
-func (tb *Throttler) traverse(tickThres int64) {
+func (tb *Throttler) checkBucket(tickThres int64, tag string) {
 	tb.mu.Lock()
-	defer tb.mu.Lock()
-	for tag, bucket := range tb.buckets {
-		// Skip taken buckets
-		if _, taken := tb.takenBuckets[tag]; taken {
-			continue
-		}
+	defer tb.mu.Unlock()
 
-		now := time.Now()
-
-		currentTick := int64(now.Sub(bucket.startTime) / bucket.fillInterval)
-		// Skip buckets that got updated recently
-		if currentTick-bucket.availTick < tickThres {
-			continue
-		}
-
-		bucket.adjust(now)
-
-		// Skip not-full buckets; this should never happen really
-		if bucket.capacity != bucket.avail {
-			continue
-		}
-
-		// It's safe to remove this bucket to the pool
-		delete(tb.takenBuckets, tag)
-		delete(tb.buckets, tag)
-		tb.pool.Pool(bucket)
+	// Skip taken buckets
+	if _, taken := tb.takenBuckets[tag]; taken {
+		return
 	}
+
+	now := time.Now()
+
+	// Check if it was taken again
+	if _, taken := tb.takenBuckets[tag]; taken {
+		return
+	}
+
+	bucket := tb.buckets[tag]
+	currentTick := int64(now.Sub(bucket.startTime) / bucket.fillInterval)
+	// Skip buckets that got updated recently
+	if currentTick-bucket.availTick < tickThres {
+		tb.mu.Unlock()
+	}
+
+	bucket.adjust(now)
+
+	// Skip not-full buckets; this should never happen really
+	if bucket.capacity != bucket.avail {
+		return
+	}
+
+	// It's safe to remove this bucket to the pool
+	delete(tb.takenBuckets, tag)
+	delete(tb.buckets, tag)
+	tb.pool.Pool(bucket)
 }
 
 // Bucket takes a bucket for specified tag, creating one if it doesn't exist.
