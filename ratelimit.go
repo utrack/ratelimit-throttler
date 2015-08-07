@@ -195,17 +195,36 @@ func (tb *Bucket) take(now time.Time, count int64, maxWait time.Duration) (time.
 		tb.avail = avail
 		return 0, true
 	}
-	// Round up the missing tokens to the nearest multiple
-	// of quantum - the tokens won't be available until
-	// that tick.
-	endTick := currentTick + (-avail+tb.quantum-1)/tb.quantum
-	endTime := tb.startTime.Add(time.Duration(endTick) * tb.fillInterval)
-	waitTime := endTime.Sub(now)
+
+	waitTime := tb.getWaitTime(now, currentTick, count)
 	if waitTime > maxWait {
 		return 0, false
 	}
 	tb.avail = avail
 	return waitTime, true
+}
+
+// getWaitTime returns how soon needed token count would be available.
+func (tb *Bucket) getWaitTime(now time.Time, currentTick, tokenCount int64) time.Duration {
+	avail := tb.avail - tokenCount
+	if avail >= 0 {
+		return time.Duration(0)
+	}
+	endTick := currentTick + (-avail+tb.quantum-1)/tb.quantum
+	endTime := tb.startTime.Add(time.Duration(endTick) * tb.fillInterval)
+
+	ret := endTime.Sub(now)
+	if ret < 0 {
+		return time.Duration(0)
+	}
+	return ret
+}
+
+// TimeUntil returns duration, after which passed token count will be available.
+func (tb *Bucket) TimeUntil(count int64) time.Duration {
+	now := time.Now()
+	currentTick := tb.adjust(now)
+	return tb.getWaitTime(now, currentTick, count)
 }
 
 // Set the amount of tokens in the bucket

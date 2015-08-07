@@ -5,6 +5,7 @@
 package ratelimit
 
 import (
+	"fmt"
 	"math"
 
 	gc "launchpad.net/gocheck"
@@ -255,6 +256,18 @@ func (rateLimitSuite) TestTakeAvailable(c *gc.C) {
 	}
 }
 
+func (rateLimitSuite) TestTimeUntilTokens(c *gc.C) {
+	tb := NewBucket(250*time.Millisecond, 50)
+	now := time.Now()
+	currentTick := tb.adjust(now)
+	timeUntilAvail := tb.getWaitTime(now, currentTick, int64(50))
+	fmt.Println(tb.quantum)
+	c.Assert(tb.avail, gc.Equals, int64(50))
+	c.Assert(timeUntilAvail, gc.Equals, time.Duration(0))
+	tb.Take(50)
+	timeUntilAvail = tb.getWaitTime(now, currentTick, int64(50))
+	c.Assert(timeUntilAvail, gc.Not(gc.Equals), time.Duration(0))
+}
 func (rateLimitSuite) TestSetAvailable(c *gc.C) {
 	tb := NewBucket(250*time.Millisecond, 50)
 	available := tb.SetAvailable(10)
