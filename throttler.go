@@ -102,7 +102,7 @@ func (tb *Throttler) checkBucket(tickThres int64, tag string) {
 	currentTick := int64(now.Sub(bucket.startTime) / bucket.fillInterval)
 	// Skip buckets that got updated recently
 	if currentTick-bucket.availTick < tickThres {
-		tb.mu.Unlock()
+		return
 	}
 
 	bucket.adjust(now)
