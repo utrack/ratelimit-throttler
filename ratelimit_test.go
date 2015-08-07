@@ -255,6 +255,14 @@ func (rateLimitSuite) TestTakeAvailable(c *gc.C) {
 	}
 }
 
+func (rateLimitSuite) TestSetAvailable(c *gc.C) {
+	tb := NewBucket(250*time.Millisecond, 50)
+	available := tb.SetAvailable(10)
+	if available != 10 {
+		c.Fatalf("test for SetAvailable expected available to be 10, was %v", available)
+	}
+}
+
 func (rateLimitSuite) TestPanics(c *gc.C) {
 	c.Assert(func() { NewBucket(0, 1) }, gc.PanicMatches, "token bucket fill interval is not > 0")
 	c.Assert(func() { NewBucket(-2, 1) }, gc.PanicMatches, "token bucket fill interval is not > 0")
