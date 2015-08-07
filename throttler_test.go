@@ -42,6 +42,26 @@ func (rateLimitSuite) TestThrClose(c *gc.C) {
 	thr.Close()
 }
 
+func (rateLimitSuite) TestThrConcGet(c *gc.C) {
+	tag := "tag1"
+	thr := NewThrottler(time.Second, int64(10))
+	b := thr.Bucket(tag)
+	b2 := thr.Bucket(tag)
+
+	thr.Pool(b)
+
+	thr.mu.RLock()
+	c.Assert(len(thr.takenBuckets), gc.Equals, 1)
+	thr.mu.RUnlock()
+
+	thr.Pool(b2)
+
+	thr.mu.RLock()
+	c.Assert(len(thr.takenBuckets), gc.Equals, 0)
+	thr.mu.RUnlock()
+
+}
+
 func (rateLimitSuite) TestThrPool(c *gc.C) {
 	tag := "tag1"
 	thr := NewThrottler(time.Second, int64(10))

@@ -20,11 +20,11 @@ type Throttler struct {
 	mu sync.RWMutex
 	// TODO: should we store a pointer?
 	buckets      map[string]*Bucket
-	takenBuckets map[string]interface{}
+	takenBuckets map[string]uint
 }
 
 func newThrottler(cf func() *Bucket) *Throttler {
-	ret := &Throttler{buckets: make(map[string]*Bucket), takenBuckets: make(map[string]interface{})}
+	ret := &Throttler{buckets: make(map[string]*Bucket), takenBuckets: make(map[string]uint)}
 	ret.creator = cf
 	ret.closing = make(chan struct{})
 	ret.pool = newPool(50)
@@ -123,7 +123,7 @@ func (tb *Throttler) Bucket(tag string) *Bucket {
 
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
-	tb.takenBuckets[tag] = nil
+	tb.takenBuckets[tag]++
 	tb.buckets[tag] = ret
 	ret.tag = tag
 	return ret
@@ -133,7 +133,10 @@ func (tb *Throttler) Bucket(tag string) *Bucket {
 func (tb *Throttler) Pool(b *Bucket) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
-	delete(tb.takenBuckets, b.tag)
+	tb.takenBuckets[b.tag]--
+	if tb.takenBuckets[b.tag] == 0 {
+		delete(tb.takenBuckets, b.tag)
+	}
 }
 
 // Close shuts down cleanup goroutine.
