@@ -5,6 +5,8 @@
 package ratelimit
 
 import (
+	"math"
+
 	gc "launchpad.net/gocheck"
 
 	"testing"
@@ -261,7 +263,7 @@ func (rateLimitSuite) TestPanics(c *gc.C) {
 }
 
 func isCloseTo(x, y, tolerance float64) bool {
-	return abs(x-y)/y < tolerance
+	return math.Abs(x-y)/y < tolerance
 }
 
 func (rateLimitSuite) TestRate(c *gc.C) {

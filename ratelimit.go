@@ -8,10 +8,10 @@
 package ratelimit
 
 import (
+	"math"
 	"strconv"
 	"sync"
 	"time"
-	"math"
 )
 
 // Bucket represents a token bucket that fills at a predetermined rate.
@@ -21,6 +21,9 @@ type Bucket struct {
 	capacity     int64
 	quantum      int64
 	fillInterval time.Duration
+
+	// Bucket's tag; used only by Throttler.
+	tag string
 
 	// The mutex guards the fields following it.
 	mu sync.Mutex
