@@ -5,6 +5,7 @@
 // The ratelimit package provides an efficient token bucket implementation
 // that can be used to limit the rate of arbitrary things.
 // See http://en.wikipedia.org/wiki/Token_bucket.
+// This fork provides tag-based bucket container (see Throttler).
 package ratelimit
 
 import (
