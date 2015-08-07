@@ -71,8 +71,8 @@ func NewThrottlerWithRate(rate float64, capacity int64) *Throttler {
 // tickThres param regulates how many refillIntervals should pass
 // before unused bucket gets deleted.
 func (tb *Throttler) traverse(tickThres int64) {
-	tb.mu.RLock()
-	defer tb.mu.RUnlock()
+	tb.mu.Lock()
+	defer tb.mu.Lock()
 	for tag, bucket := range tb.buckets {
 		// Skip taken buckets
 		if _, taken := tb.takenBuckets[tag]; taken {
@@ -95,9 +95,6 @@ func (tb *Throttler) traverse(tickThres int64) {
 		}
 
 		// It's safe to remove this bucket to the pool
-		if _, taken := tb.takenBuckets[tag]; taken {
-			continue
-		}
 		delete(tb.takenBuckets, tag)
 		delete(tb.buckets, tag)
 		tb.pool.Pool(bucket)
