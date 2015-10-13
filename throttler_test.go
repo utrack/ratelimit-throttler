@@ -64,7 +64,7 @@ func (rateLimitSuite) TestThrConcGet(c *gc.C) {
 
 func (rateLimitSuite) TestThrPool(c *gc.C) {
 	tag := "tag1"
-	thr := NewThrottler(time.Second, int64(10))
+	thr := NewThrottler(time.Second, int64(1))
 	b := thr.Bucket(tag)
 
 	thr.Pool(b)

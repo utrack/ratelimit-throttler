@@ -10,11 +10,10 @@ import (
 // so it's safe to use one Throttler for user-based throttling.
 // Unused buckets are pooled and reused over time.
 type Throttler struct {
-	creator func() *Bucket
 	closing chan struct{}
 
 	// A pool of unused buckets.
-	pool *pool
+	pool *sync.Pool
 
 	// This mutex guards bucket maps.
 	mu sync.RWMutex
@@ -23,21 +22,24 @@ type Throttler struct {
 	takenBuckets map[string]uint
 }
 
-func newThrottler(cf func() *Bucket) *Throttler {
+func newThrottler(cf func() interface{}) *Throttler {
 	ret := &Throttler{buckets: make(map[string]*Bucket), takenBuckets: make(map[string]uint)}
-	ret.creator = cf
 	ret.closing = make(chan struct{})
-	ret.pool = newPool(50)
+	ret.pool = &sync.Pool{}
 	ret.closing = make(chan struct{})
+
+	ret.pool.New = cf
 
 	// Fetch fillInterval from sample bucket
 	var fillInterval time.Duration
+	var capacity int64
 	{
-		bucket := ret.creator()
+		bucket := cf().(*Bucket)
+		capacity = bucket.capacity
 		fillInterval = bucket.fillInterval
 	}
 
-	ticker := time.NewTicker(fillInterval * 5)
+	ticker := time.NewTicker(fillInterval * time.Duration(capacity))
 
 	// Launch scanning goroutine
 	go func() {
@@ -70,13 +72,13 @@ func newThrottler(cf func() *Bucket) *Throttler {
 // NewThrottler creates a throttler with default bucket parameters.
 // Similar to NewBucket.
 func NewThrottler(fillInterval time.Duration, capacity int64) *Throttler {
-	return newThrottler(func() *Bucket { return NewBucket(fillInterval, capacity) })
+	return newThrottler(func() interface{} { return NewBucket(fillInterval, capacity) })
 }
 
 // NewThrottler creates a throttler with default bucket parameters.
 // Similar to NewBucketWithRate.
 func NewThrottlerWithRate(rate float64, capacity int64) *Throttler {
-	return newThrottler(func() *Bucket { return NewBucketWithRate(rate, capacity) })
+	return newThrottler(func() interface{} { return NewBucketWithRate(rate, capacity) })
 }
 
 // checkBucket scans bucket from collection and removes it if it's unused.
@@ -115,7 +117,7 @@ func (tb *Throttler) checkBucket(tickThres int64, tag string) {
 	// It's safe to remove this bucket to the pool
 	delete(tb.takenBuckets, tag)
 	delete(tb.buckets, tag)
-	tb.pool.Pool(bucket)
+	tb.pool.Put(bucket)
 }
 
 // Bucket takes a bucket for specified tag, creating one if it doesn't exist.
@@ -123,16 +125,12 @@ func (tb *Throttler) checkBucket(tickThres int64, tag string) {
 func (tb *Throttler) Bucket(tag string) *Bucket {
 	// try to get a bucket from map
 	tb.mu.RLock()
-	ret := tb.buckets[tag]
+	ret, ok := tb.buckets[tag]
 	tb.mu.RUnlock()
 
 	// try to get a bucket from pool
-	if ret == nil {
-		ret = tb.pool.Get()
-	}
-	// construct new bucket if pool is empty
-	if ret == nil {
-		ret = tb.creator()
+	if !ok {
+		ret = tb.pool.Get().(*Bucket)
 	}
 
 	tb.mu.Lock()
